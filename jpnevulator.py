@@ -25,7 +25,7 @@ import sys
 import time
 import textwrap
 from datetime import datetime as dt
-
+import colorama
 import serial
 
 try:
@@ -80,6 +80,7 @@ def ascii_format(chunk):
         return ''.join([char if char in printable else '.' for char in chars])
 
 def main():
+    colorama.init()
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[1])
     parser.add_argument('-r', '--read', action='store_true', help='Put the program in read mode. This way you read the data from the given serial device(s) and write it to the file given or stdout if none given. See the read options section for more read specific options.')
     parser.add_argument('-t', '--tty', type=port_def, dest='ttys', action=MultiArg, metavar='NAME@BAUDRATE:ALIAS', help="The serial device to read from. Use multiple times to read from more than one serial device(s). For handy reference you can also separate an alias from the tty name with a collon ':'. If an alias is given it will be used as the name of the serial device.")
@@ -113,7 +114,10 @@ def main():
         tty['ser'] = serial.Serial(tty['port'], baudrate=tty['baudrate'], timeout=0)
         tty['last_byte'] = clock()
         num += 1
-
+    tty_colors = {
+        "0": colorama.Fore.GREEN,
+        "1": colorama.Fore.BLUE,
+    }
     try:
         while True:
             for tty in ttys:
@@ -121,9 +125,10 @@ def main():
                 if len(new_data) > 0:
                     tty['buffer'] += new_data
                     tty['last_byte'] = clock()
-            for tty in ttys:
+            for idx, tty in enumerate(ttys):
                 if tty['buffer'] and (clock() - tty['last_byte']) > args.timing_delta/1E6:
-                    line = '{0}: {1}\n'.format(dt.now().isoformat(' '), tty['alias'])
+                    line = colorama.Style.BRIGHT + tty_colors["%d" % idx] + '{0}: {1}\n'.format(dt.now().isoformat(' '), tty['alias'])
+                    line += colorama.Style.RESET_ALL
                     sys.stdout.write(line)
                     while tty['buffer']:
                         chunk = tty['buffer'][:args.width]
