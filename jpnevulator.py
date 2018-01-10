@@ -81,6 +81,80 @@ def ascii_format(chunk):
         chars = chunk
         return ''.join([char if char in printable else '.' for char in chars])
 
+def print_err(text):
+    print >> sys.stderr, colorama.Fore.RED + text + colorama.Style.RESET_ALL
+
+def print_ok(text):
+    print (colorama.Fore.GREEN + text + colorama.Style.RESET_ALL)
+
+# If python 2, type(data) should be string
+# If python 3, type(data) should be bytes
+def dump_hex(data, desc_str="", token=":", prefix="", wrap=0, preFormat=""):
+    """
+    data: hex data to be dump
+    desc_str: description string, will be print first
+    token: the mark to seperated between bytes
+    prefix: prefix of bytes
+    wrap: number of bytes to be printed before create a new line
+    """
+    global gStr
+    gStr = ""
+    def concat_str(text):
+        global gStr
+        gStr += text
+    def write_and_concat_str(text):
+        concat_str(text)
+        sys.stdout.write(text)
+
+    varType = ""
+    varArray = ""
+    postfix = ""
+    if preFormat == "C" or preFormat == "c":
+        token = ", "
+        prefix = "0x"
+        wrap = 8
+        varType = "uint8_t"
+        varArray = "[]"
+        postfix = "\r\n\t};\r\n\r\n"
+    elif preFormat == "raw":
+        token = " "
+        prefix = ""
+        wrap = 0
+        desc_str = '"%s":\r\n' % (desc_str)
+        postfix = "\r\n\r\n"
+    else:
+        postfix = "\r\n\t\t}\r\n\r\n"
+
+    # print desc_str + binascii.hexlify(data)
+    if wrap == 0:
+        to_write = desc_str + token.join(prefix+"{:02x}".format(ord(c)) for c in data) + "\r\n"
+        write_and_concat_str(to_write)
+    else:
+        # [Ref](http://stackoverflow.com/questions/734368/type-checking-of-arguments-python)
+        if isinstance(data, int):
+            data = bigIntToBytes(data)
+
+        count = 0
+
+        write_and_concat_str("%s %s%s = {\r\n\t\t" % (varType, desc_str, varArray))
+        for c in data:
+            if (count % wrap == 0) and (count != 0) and (wrap != 0):
+                write_and_concat_str("\r\n\t\t")
+            if pythonVer() == 2:
+                to_write = prefix + "{:02x}".format(ord(c)) + token
+            else:
+                to_write = prefix + "{:02x}".format(c) + token
+            write_and_concat_str(to_write)
+            count += 1
+
+        write_and_concat_str(postfix)
+        sys.stdout.flush()
+    ret = gStr
+    del gStr
+    return ret
+# Register another name for the dump_hex function
+hex_dump = dump_hex
+
 def get_fullpath(file_dir, file_name):
     if file_dir == "":
         return file_name
@@ -124,12 +198,29 @@ def parse_scpcmd_file(filename):
         packet = {
             "data": packet_data,
             "type": "CMD" if way_str == "host" else "RSP",
+            "is_check": False,
         }
         packet_list.append(packet)
 
     cmds_file.close()
 
     return packet_list
+
+def process_scp_data(data, firmware_packets):
+    marked_firmware_packets = firmware_packets
+
+    for idx, packet in enumerate(firmware_packets):
+        if packet["is_check"] == True:
+            continue
+        if packet["data"] == data:
+            marked_firmware_packets[idx]["is_check"] = True
+            print_ok ("=> Data match")
+        else:
+            dump_hex(data, "Get   :")
+            dump_hex(packet["data"], "Should:")
+            print_err ("=> Data not match !!!")
+            return firmware_packets
+    return marked_firmware_packets
 
 def main():
     colorama.init()
@@ -168,13 +259,13 @@ def main():
         tty['last_byte'] = clock()
         num += 1
     tty_colors = {
-        "0": colorama.Fore.GREEN,
-        "1": colorama.Fore.BLUE,
+        "0": colorama.Back.BLUE,
+        "1": colorama.Back.YELLOW,
     }
 
     firmware_packets = []
     if args.file_path is not None:
-        print ("There is firmware")
+        print_ok ("There is firmware")
         firmware_packets = parse_scpcmd_file(args.file_path)
         # for idx, packet in enumerate(firmware_packets):
         #     print "%3d: %s %d" % (idx, firmware_packets["type"], len(firmware_packets["data"]))
@@ -188,8 +279,9 @@ def main():
                     tty['last_byte'] = clock()
             for idx, tty in enumerate(ttys):
                 if tty['buffer'] and (clock() - tty['last_byte']) > args.timing_delta/1E6:
-                    line = colorama.Style.BRIGHT + tty_colors["%d" % idx] + '{0}: {1}\n'.format(dt.now().isoformat(' '), tty['alias'])
-                    line += colorama.Style.RESET_ALL
+                    tty['org_buffer'] = tty['buffer']
+                    line = colorama.Style.BRIGHT + tty_colors["%d" % idx] + '{0}: {1}'.format(dt.now().isoformat(' '), tty['alias'])
+                    line += colorama.Style.RESET_ALL + '\n'
                     sys.stdout.write(line)
                     while tty['buffer']:
                         chunk = tty['buffer'][:args.width]
@@ -203,6 +295,8 @@ def main():
                         line += '\n'
                         sys.stdout.write(line)
                     sys.stdout.flush()
+                    firmware_packets = process_scp_data(tty['org_buffer'], firmware_packets)
+
     except KeyboardInterrupt:
         sys.exit(1)
 
