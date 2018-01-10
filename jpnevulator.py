@@ -210,7 +210,7 @@ def parse_scpcmd_file(filename):
 def process_scp_data(data, firmware_packets):
     org_data = data
     marked_firmware_packets = firmware_packets
-
+    count = 0
     for idx, packet in enumerate(firmware_packets):
         if packet["is_check"] == True:
             continue
@@ -222,20 +222,23 @@ def process_scp_data(data, firmware_packets):
             data = data[len(packet["data"]):]
             marked_firmware_packets[idx]["is_check"] = True
             print_ok ("\t=> Data match %d (cont)" % (idx + 1))
+            count += 1
             continue
         elif packet["is_ignore"] is True:
             marked_firmware_packets[idx]["is_check"] = True
             print_ok ("\t=> Ignore packet %d" % (idx + 1))
             return marked_firmware_packets
         elif data == "\x00":
+            should_idx = idx if count == 0 else idx-1
             dump_hex(org_data,                        "\tGet   :")
-            dump_hex(firmware_packets[idx-1]["data"], "\tShould:")
+            dump_hex(firmware_packets[should_idx]["data"], "\tShould:")
             print_err ("\t=> Wierd 00 byte at the end !!!")
             return firmware_packets
         else:
             if firmware_packets[0]["data"] in data[:len(firmware_packets[0]["data"])]:
                 print_ok ("\t=> Ignore host_connection_request_packet")
                 data = data[len(firmware_packets[0]["data"]):]
+                count += 1
                 if packet["data"] == data:
                     marked_firmware_packets[idx]["is_check"] = True
                     print_ok ("\t=> Data match %d" % (idx + 1))
