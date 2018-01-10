@@ -236,6 +236,15 @@ def process_scp_data(data, firmware_packets):
             if firmware_packets[0]["data"] in data[:len(firmware_packets[0]["data"])]:
                 print_ok ("=> Ignore host_connection_request_packet")
                 data = data[len(firmware_packets[0]["data"]):]
+                if packet["data"] == data:
+                    marked_firmware_packets[idx]["is_check"] = True
+                    print_ok ("=> Data match %d" % (idx + 1))
+                    return marked_firmware_packets
+                elif packet["data"] == data[:len(packet["data"])]:
+                    data = data[len(packet["data"]):]
+                    marked_firmware_packets[idx]["is_check"] = True
+                    print_ok ("=> Data match %d (cont)" % (idx + 1))
+                    continue
                 continue
             dump_hex(org_data,       "Get   :")
             dump_hex(packet["data"], "Should:")
