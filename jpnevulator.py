@@ -82,7 +82,7 @@ def ascii_format(chunk):
         return ''.join([char if char in printable else '.' for char in chars])
 
 def print_err(text):
-    print >> sys.stderr, colorama.Fore.RED + text + colorama.Style.RESET_ALL
+    print (colorama.Fore.RED + text + colorama.Style.RESET_ALL)
 
 def print_ok(text):
     print (colorama.Style.BRIGHT + colorama.Fore.GREEN + text + colorama.Style.RESET_ALL)
@@ -199,6 +199,7 @@ def parse_scpcmd_file(filename):
             "data": packet_data,
             "type": "CMD" if way_str == "host" else "RSP",
             "is_check": False,
+            "is_ignore": True if cmd == "hello_reply" else False,
         }
         packet_list.append(packet)
 
@@ -207,6 +208,7 @@ def parse_scpcmd_file(filename):
     return packet_list
 
 def process_scp_data(data, firmware_packets):
+    org_data = data
     marked_firmware_packets = firmware_packets
 
     for idx, packet in enumerate(firmware_packets):
@@ -221,8 +223,16 @@ def process_scp_data(data, firmware_packets):
             marked_firmware_packets[idx]["is_check"] = True
             print_ok ("=> Data match %d" % (idx + 1))
             continue
+        elif packet["is_ignore"] is True:
+            marked_firmware_packets[idx]["is_check"] = True
+            print_ok ("=> Ignore packet %d" % (idx + 1))
+            return marked_firmware_packets
         else:
-            dump_hex(data, "Get   :")
+            if firmware_packets[0]["data"] in data:
+                print_ok ("=> Ignore host_connection_request_packet")
+                data = data[len(firmware_packets[0]["data"]):]
+                continue
+            dump_hex(org_data, "Get   :")
             dump_hex(packet["data"], "Should:")
             print_err ("=> Data not match !!!")
             return firmware_packets
