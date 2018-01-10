@@ -27,6 +27,8 @@ import textwrap
 from datetime import datetime as dt
 import colorama
 import serial
+import os
+import re
 
 try:
     clock = time.perf_counter
@@ -79,10 +81,60 @@ def ascii_format(chunk):
         chars = chunk
         return ''.join([char if char in printable else '.' for char in chars])
 
+def get_fullpath(file_dir, file_name):
+    if file_dir == "":
+        return file_name
+    return file_dir + os.sep + file_name
+
+def parse_scpcmd_file(filename):
+    """
+    :param cmds_file:
+    :param file_dir:
+    :param :
+    :return:
+    """
+
+    print 'Open file: ' + filename
+    cmds_file = open(filename, 'r')
+    file_dir = os.path.dirname(filename)
+
+    packet_list = []
+
+    # Get number of packets to send
+    for line in cmds_file:
+        file_name = line.strip()
+        s_m = re.search('(\w+[_-]*\w+)\.(\d+)\.(\w+[_-]*\w+)\.((\w+[_-]*)*)\.\w+', file_name)
+        if s_m is not None:
+            id = s_m.group(2)
+            cmd = s_m.group(4)
+            way_str = s_m.group(3)
+        else:
+            print("error: wrong filename: " + file_name)
+            raise Exception()
+
+        if way_str == 'bl':
+            way = False
+        elif way_str == 'host':
+            way = True
+        else:
+            print("error: wrong filename: " + file_name)
+            raise Exception()
+
+        packet_data = open(get_fullpath(file_dir, file_name), 'rb').read()
+        packet = {
+            "data": packet_data,
+            "type": "CMD" if way_str == "host" else "RSP",
+        }
+        packet_list.append(packet)
+
+    cmds_file.close()
+
+    return packet_list
+
 def main():
     colorama.init()
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[1])
-    parser.add_argument('-r', '--read', action='store_true', help='Put the program in read mode. This way you read the data from the given serial device(s) and write it to the file given or stdout if none given. See the read options section for more read specific options.')
+    parser.add_argument('-r', '--read', action='store_true', help='Put the program in read mode. This way you read the data from the given serial device(s) and write it to the file given or stdout if none given. See the read  section for more read specific .')
     parser.add_argument('-t', '--tty', type=port_def, dest='ttys', action=MultiArg, metavar='NAME@BAUDRATE:ALIAS', help="The serial device to read from. Use multiple times to read from more than one serial device(s). For handy reference you can also separate an alias from the tty name with a collon ':'. If an alias is given it will be used as the name of the serial device.")
     parser.add_argument('-e', '--timing-delta', type=int, metavar='MICROSECONDS', default=100000, help='The timing delta is the amount of microseconds between two bytes that the latter is considered to be part of a new package. The default is 100 miliseconds. Use this option in conjunction with the --timing-print option.')
     parser.add_argument('-g', '--timing-print', action='store_true', help='Print a line of timing information before every continues stream of bytes. When multiple serial devices are given also print the name or alias of the device where the data is coming from.')
@@ -90,6 +142,7 @@ def main():
     parser.add_argument('-u', '--baudrate', type=int, default=9600, help='The baudrate to open the serial port at.')
     parser.add_argument('-i', '--width', type=int, default=16, help='The number of bytes to display on one line. The default is 16.')
     parser.add_argument('-v', '--version', action='store_true', help='Output the version information, a small GPL notice and exit.')
+    parser.add_argument('-f', '--file-path', type=str, help='Firmware folder path.')
     args = parser.parse_args()
 
     if args.version:
@@ -118,6 +171,14 @@ def main():
         "0": colorama.Fore.GREEN,
         "1": colorama.Fore.BLUE,
     }
+
+    firmware_packets = []
+    if args.file_path is not None:
+        print ("There is firmware")
+        firmware_packets = parse_scpcmd_file(args.file_path)
+        # for idx, packet in enumerate(firmware_packets):
+        #     print "%3d: %s %d" % (idx, firmware_packets["type"], len(firmware_packets["data"]))
+
     try:
         while True:
             for tty in ttys:
