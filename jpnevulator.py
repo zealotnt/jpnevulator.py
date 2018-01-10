@@ -82,7 +82,7 @@ def ascii_format(chunk):
         return ''.join([char if char in printable else '.' for char in chars])
 
 def print_err(text):
-    print (colorama.Fore.RED + text + colorama.Style.RESET_ALL)
+    print (colorama.Style.BRIGHT + colorama.Fore.RED + text + colorama.Style.RESET_ALL)
 
 def print_ok(text):
     print (colorama.Style.BRIGHT + colorama.Fore.GREEN + text + colorama.Style.RESET_ALL)
@@ -221,18 +221,23 @@ def process_scp_data(data, firmware_packets):
         elif packet["data"] == data[:len(packet["data"])]:
             data = data[len(packet["data"]):]
             marked_firmware_packets[idx]["is_check"] = True
-            print_ok ("=> Data match %d" % (idx + 1))
+            print_ok ("=> Data match %d (cont)" % (idx + 1))
             continue
         elif packet["is_ignore"] is True:
             marked_firmware_packets[idx]["is_check"] = True
             print_ok ("=> Ignore packet %d" % (idx + 1))
             return marked_firmware_packets
+        elif data == "\x00":
+            dump_hex(org_data,       "Get   :")
+            dump_hex(packet["data"], "Should:")
+            print_err ("=> Wierd 00 byte at the end !!!")
+            return firmware_packets
         else:
-            if firmware_packets[0]["data"] in data:
+            if firmware_packets[0]["data"] in data[:len(firmware_packets[0]["data"])]:
                 print_ok ("=> Ignore host_connection_request_packet")
                 data = data[len(firmware_packets[0]["data"]):]
                 continue
-            dump_hex(org_data, "Get   :")
+            dump_hex(org_data,       "Get   :")
             dump_hex(packet["data"], "Should:")
             print_err ("=> Data not match !!!")
             return firmware_packets
@@ -300,6 +305,10 @@ def main():
                     line += colorama.Style.RESET_ALL + '\n'
                     sys.stdout.write(line)
                     while tty['buffer']:
+                        if len(tty['buffer']) > 1024:
+                            tty['buffer'] = ""
+                            print("Data too long, skip printing")
+                            break
                         chunk = tty['buffer'][:args.width]
                         tty['buffer'] = tty['buffer'][args.width:]
                         fmt = "{{hex:{0}s}}".format(args.width*3)
