@@ -85,7 +85,7 @@ def print_err(text):
     print >> sys.stderr, colorama.Fore.RED + text + colorama.Style.RESET_ALL
 
 def print_ok(text):
-    print (colorama.Fore.GREEN + text + colorama.Style.RESET_ALL)
+    print (colorama.Style.BRIGHT + colorama.Fore.GREEN + text + colorama.Style.RESET_ALL)
 
 # If python 2, type(data) should be string
 # If python 3, type(data) should be bytes
@@ -214,7 +214,13 @@ def process_scp_data(data, firmware_packets):
             continue
         if packet["data"] == data:
             marked_firmware_packets[idx]["is_check"] = True
-            print_ok ("=> Data match")
+            print_ok ("=> Data match %d" % (idx + 1))
+            return marked_firmware_packets
+        elif packet["data"] == data[:len(packet["data"])]:
+            data = data[len(packet["data"]):]
+            marked_firmware_packets[idx]["is_check"] = True
+            print_ok ("=> Data match %d" % (idx + 1))
+            continue
         else:
             dump_hex(data, "Get   :")
             dump_hex(packet["data"], "Should:")
