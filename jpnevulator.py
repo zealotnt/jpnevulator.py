@@ -216,39 +216,39 @@ def process_scp_data(data, firmware_packets):
             continue
         if packet["data"] == data:
             marked_firmware_packets[idx]["is_check"] = True
-            print_ok ("=> Data match %d" % (idx + 1))
+            print_ok ("\t=> Data match %d" % (idx + 1))
             return marked_firmware_packets
         elif packet["data"] == data[:len(packet["data"])]:
             data = data[len(packet["data"]):]
             marked_firmware_packets[idx]["is_check"] = True
-            print_ok ("=> Data match %d (cont)" % (idx + 1))
+            print_ok ("\t=> Data match %d (cont)" % (idx + 1))
             continue
         elif packet["is_ignore"] is True:
             marked_firmware_packets[idx]["is_check"] = True
-            print_ok ("=> Ignore packet %d" % (idx + 1))
+            print_ok ("\t=> Ignore packet %d" % (idx + 1))
             return marked_firmware_packets
         elif data == "\x00":
-            dump_hex(org_data,       "Get   :")
-            dump_hex(packet["data"], "Should:")
-            print_err ("=> Wierd 00 byte at the end !!!")
+            dump_hex(org_data,                        "\tGet   :")
+            dump_hex(firmware_packets[idx-1]["data"], "\tShould:")
+            print_err ("\t=> Wierd 00 byte at the end !!!")
             return firmware_packets
         else:
             if firmware_packets[0]["data"] in data[:len(firmware_packets[0]["data"])]:
-                print_ok ("=> Ignore host_connection_request_packet")
+                print_ok ("\t=> Ignore host_connection_request_packet")
                 data = data[len(firmware_packets[0]["data"]):]
                 if packet["data"] == data:
                     marked_firmware_packets[idx]["is_check"] = True
-                    print_ok ("=> Data match %d" % (idx + 1))
+                    print_ok ("\t=> Data match %d" % (idx + 1))
                     return marked_firmware_packets
                 elif packet["data"] == data[:len(packet["data"])]:
                     data = data[len(packet["data"]):]
                     marked_firmware_packets[idx]["is_check"] = True
-                    print_ok ("=> Data match %d (cont)" % (idx + 1))
+                    print_ok ("\t=> Data match %d (cont)" % (idx + 1))
                     continue
                 continue
-            dump_hex(org_data,       "Get   :")
-            dump_hex(packet["data"], "Should:")
-            print_err ("=> Data not match !!!")
+            dump_hex(org_data,       "\tGet   :")
+            dump_hex(packet["data"], "\tShould:")
+            print_err ("\t=> Data not match !!!")
             return firmware_packets
     return marked_firmware_packets
 
@@ -316,7 +316,7 @@ def main():
                     while tty['buffer']:
                         if len(tty['buffer']) > 1024:
                             tty['buffer'] = ""
-                            print("Data too long, skip printing")
+                            print("\tData too long, skip printing")
                             break
                         chunk = tty['buffer'][:args.width]
                         tty['buffer'] = tty['buffer'][args.width:]
@@ -327,6 +327,7 @@ def main():
                             line += ' ' + fmt.format(ascii=ascii_format(chunk))
                         line = line.strip()
                         line += '\n'
+                        line = '\t' + line
                         sys.stdout.write(line)
                     sys.stdout.flush()
                     firmware_packets = process_scp_data(tty['org_buffer'], firmware_packets)
