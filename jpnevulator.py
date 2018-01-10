@@ -29,6 +29,7 @@ import colorama
 import serial
 import os
 import re
+import signal
 
 try:
     clock = time.perf_counter
@@ -200,6 +201,7 @@ def parse_scpcmd_file(filename):
             "type": "CMD" if way_str == "host" else "RSP",
             "is_check": False,
             "is_ignore": True if cmd == "hello_reply" else False,
+            "time": None,
         }
         packet_list.append(packet)
 
@@ -216,22 +218,26 @@ def process_scp_data(data, firmware_packets):
             continue
         if packet["data"] == data:
             marked_firmware_packets[idx]["is_check"] = True
+            marked_firmware_packets[idx]["time"] = clock()
             print_ok ("\t=> Data match %d" % (idx + 1))
             return marked_firmware_packets
         elif packet["data"] == data[:len(packet["data"])]:
             data = data[len(packet["data"]):]
             marked_firmware_packets[idx]["is_check"] = True
+            marked_firmware_packets[idx]["time"] = clock()
             print_ok ("\t=> Data match %d (cont)" % (idx + 1))
             count += 1
             continue
         elif packet["is_ignore"] is True:
             marked_firmware_packets[idx]["is_check"] = True
+            marked_firmware_packets[idx]["time"] = clock()
             print_ok ("\t=> Ignore packet %d" % (idx + 1))
             return marked_firmware_packets
         elif data == "\x00":
             should_idx = idx if count == 0 else idx-1
-            dump_hex(org_data,                        "\tGet   :")
-            dump_hex(firmware_packets[should_idx]["data"], "\tShould:")
+            dump_hex(org_data,                             "\tGet_org:")
+            dump_hex(data,                                 "\tGet_dif:")
+            dump_hex(firmware_packets[should_idx]["data"], "\tShould :")
             print_err ("\t=> Wierd 00 byte at the end !!!")
             return firmware_packets
         else:
@@ -241,19 +247,49 @@ def process_scp_data(data, firmware_packets):
                 count += 1
                 if packet["data"] == data:
                     marked_firmware_packets[idx]["is_check"] = True
+                    marked_firmware_packets[idx]["time"] = clock()
                     print_ok ("\t=> Data match %d" % (idx + 1))
                     return marked_firmware_packets
                 elif packet["data"] == data[:len(packet["data"])]:
                     data = data[len(packet["data"]):]
                     marked_firmware_packets[idx]["is_check"] = True
+                    marked_firmware_packets[idx]["time"] = clock()
                     print_ok ("\t=> Data match %d (cont)" % (idx + 1))
                     continue
                 continue
-            dump_hex(org_data,       "\tGet   :")
-            dump_hex(packet["data"], "\tShould:")
+            dump_hex(org_data,       "\tGet_org:")
+            dump_hex(data,           "\tGet_dif:")
+            dump_hex(packet["data"], "\tShould :")
             print_err ("\t=> Data not match !!!")
             return firmware_packets
     return marked_firmware_packets
+
+def print_diff_time(*args):
+    global is_running
+    global firmware_packets
+
+    # 10: del_mem_response
+    print (">"*50)
+    print_ok("Conclusion:")
+    idx_first = 2
+    last_packet = 0
+    time_first = ""
+    time_last = ""
+    time_first = firmware_packets[idx_first]["time"]
+    for idx, packet in enumerate(firmware_packets):
+        if idx != len(firmware_packets) - 1 and packet["is_check"] == True:
+            continue
+        last_packet = idx-1
+        time_last = firmware_packets[last_packet]["time"]
+        print ("\tLast ok packet is %d" % (last_packet))
+        break
+    # print (time_last)
+    # print (time_first)
+    # print (time_last - time_first)
+    print("\tDifftime between packet %d and %d = %f sec" %
+        (idx_first, last_packet, time_last - time_first))
+    print ("<"*50)
+    is_running = False
 
 def main():
     colorama.init()
@@ -296,6 +332,10 @@ def main():
         "1": colorama.Back.YELLOW,
     }
 
+    # catch CTRL+C signal
+    signal.signal(signal.SIGINT, print_diff_time)
+
+    global firmware_packets
     firmware_packets = []
     if args.file_path is not None:
         print_ok ("There is firmware")
@@ -303,8 +343,10 @@ def main():
         # for idx, packet in enumerate(firmware_packets):
         #     print "%3d: %s %d" % (idx, firmware_packets["type"], len(firmware_packets["data"]))
 
+    global is_running
+    is_running = True
     try:
-        while True:
+        while is_running:
             for tty in ttys:
                 new_data = tty['ser'].read()
                 if len(new_data) > 0:
