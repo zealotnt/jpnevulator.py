@@ -8,5 +8,5 @@ while [ true ]; do
 	echo ""
 	echo "stopping jpnevulator.py"
 	sleep 1
-	clear
+	# clear
 done
